@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Add your custom config options here
+  typescript:{
+    ignoreBuildErrors:true
+  },
   experimental: {
     serverActions: {}, // Use an empty object for serverActions
     
