@@ -18,7 +18,7 @@ import { ZoheValidation } from "@/lib/validations/zohe"
 // import { updateUser } from "@/lib/actions/user.actions"
 import { usePathname, useRouter } from "next/navigation"
 import { createZohe } from "@/lib/actions/zohe.actions"
-import { getRandomValues } from "crypto"
+import { useOrganization } from "@clerk/nextjs"
 
 
 interface Props{
@@ -41,6 +41,7 @@ interface Props{
 function PostZohe({userId}: {userId:string }){
     const router = useRouter()
     const  pathname  = usePathname()
+    const { organization } = useOrganization()
 
 
     const form = useForm({
@@ -53,14 +54,15 @@ function PostZohe({userId}: {userId:string }){
     })
 
     const onSubmit = async (values: z.infer<typeof ZoheValidation>) =>{
-         await createZohe({
-          text: values.zohe,
-          author: userId,
-          communityId: null,
-          path: pathname
-         })
+     // console.log('ORG ID ',organization )
+      await createZohe({
+        text: values.zohe,
+        author: userId,
+        communityId: organization ? organization.id: null,
+        path: pathname
+        })
 
-         router.push("/")
+     router.push("/")
     }
 
     return (

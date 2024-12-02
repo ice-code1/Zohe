@@ -75,7 +75,7 @@ export async function fetchCommunityPosts(id: string) {
     connectToDB();
 
     const communityPosts = await Community.findById(id).populate({
-      path: "zohe",
+      path: "zohes",
       model: Zohe,
       populate: [
         {
@@ -282,7 +282,7 @@ export async function deleteCommunity(communityId: string) {
       throw new Error("Community not found");
     }
 
-    // Delete all threads associated with the community
+    // Delete all zohes associated with the community
     await Zohe.deleteMany({ community: communityId });
 
     // Find all users who are part of the community

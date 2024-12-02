@@ -1,180 +1,184 @@
-"use server"
+"use server";
 
-import { revalidatePath } from "next/cache";
-import User from "../models/user.model";
-import { connectToDB } from "../mongoose";
-import Zohe from "../models/zohe.model";
-import { getJsPageSizeInKb } from "next/dist/build/utils";
 import { FilterQuery, SortOrder } from "mongoose";
+import { revalidatePath } from "next/cache";
+
+import Community from "../models/community.model";
+import Zohe from "../models/zohe.model";
+import User from "../models/user.model";
+
+import { connectToDB } from "../mongoose";
+
+export async function fetchUser(userId: string) {
+  try {
+    connectToDB();
+
+    return await User.findOne({ id: userId }).populate({
+      path: "communities",
+      model: Community,
+    });
+  } catch (error: any) {
+    throw new Error(`Failed to fetch user: ${error.message}`);
+  }
+}
 
 interface Params {
-    userId: string;
-    username: string;
-    name: string;
-    quote: string;
-    bio: string;
-    image: string;
-    path: string;
+  userId: string;
+  username: string;
+  name: string;
+  quote: string
+  bio: string;
+  image: string;
+  path: string;
 }
 
 export async function updateUser({
-    userId,
-    username,
-    name,
-    quote,
-    bio,
-    image,
-    path,
+  userId,
+  bio,
+  name,
+  path,
+  username,
+  image,
 }: Params): Promise<void> {
-     connectToDB(); // Ensure the connection is awaited
+  try {
+    connectToDB();
 
-    try {
-        const updatedUser = await User.findOneAndUpdate(
-            { id: userId }, // Ensure this matches your schema
-            {
-                username: username.toLowerCase(),
-                name,
-                quote,
-                bio,
-                image,
-                onboarded: true,
-            },
-            {
-                upsert: true, // This will create the document if it doesn't exist
-                new: true, // Returns the updated document
-            }
-        );
+    await User.findOneAndUpdate(
+      { id: userId },
+      {
+        username: username.toLowerCase(),
+        name,
+        bio,
+        image,
+        onboarded: true,
+      },
+      { upsert: true }
+    );
 
-        if (!updatedUser) {
-            console.log('No user was updated or created.');
-        }
-
-        if (path === '/profile/edit') {
-            revalidatePath(path);
-        }
-    } catch (error: any) {
-        console.error(`Failed to create/update user: ${error.message}`); // Improved error logging
-        throw new Error(`Failed to create/update user: ${error.message}`);
+    if (path === "/profile/edit") {
+      revalidatePath(path);
     }
+  } catch (error: any) {
+    throw new Error(`Failed to create/update user: ${error.message}`);
+  }
 }
 
-export async function fetchUser(userId: string){
-    try{
-        connectToDB()
+export async function fetchUserPosts(userId: string) {
+  try {
+    connectToDB();
 
-        return await User
-            .findOne({id: userId})
-            // .populate({
-            //     path: 'communities',
-            //     model: Community
-            // })
-    } catch (error: any) {
-        throw new Error(`Failed to fetch user: ${error.message}`)
-    }
-}
-
-export async function fetchUserPosts(userId: string){
-    try{
-        connectToDB()
-
-        //zohe authored by user with user id
-
-        //Todo: populate community
-        const zohe = await User.findOne({ id:userId })
-            .populate({
-                path: 'zohe',
-                model:Zohe,
-                populate:{
-                    path: 'children',
-                    model: Zohe,
-                    populate:{
-                        path:'author',
-                        model: User,
-                        select:'name image id'
-                    }
-                }
-            })
-
-            return zohe
-    }
-    catch (error: any) {
-    throw new Error(`Failed to fetch user posts: ${error.message}`)
-    }
-}
-
-export async function fetchUsers({
-    userId,
-    searchString = "",
-    pageNumber = 1,
-    pageSize = 20,
-    sortBy = "desc"
-}:{
-    userId: string
-    searchString?: string
-    pageNumber?: number
-    pageSize?: number
-    sortBy: SortOrder
-}){
-    try{
-        connectToDB()
-
-        const skipAmount = (pageNumber - 1) * pageSize
-
-        const regex = new RegExp(searchString, "i")
-
-        const query:FilterQuery<typeof User> = {
-            id: {$ne: userId }
-        }
-
-        if(searchString.trim() !== ''){
-            query.$or = [
-                {username: { $regex: regex}},
-                {name: {$regex: regex}}
-            ]
-        }
-
-        const sortOptions = { createdAt: sortBy}
-
-        const usersQuery = User.find(query)
-            .sort(sortOptions)
-            .skip(skipAmount)
-            .limit(pageSize)
-
-        const totalUsersCount = await User.countDocuments(query)
-
-        const users = await usersQuery.exec()
-
-        const isNext = totalUsersCount > skipAmount + users.length
-
-        return {users, isNext}
-    } catch (error: any){
-        throw new Error(` Failed to fetch users: ${error.message}`)
-    }
-}
-
-export async function getActivity(userId: string){
-    try{
-        connectToDB()
-
-        //find all zohe created by the user
-        const userZohe = await Zohe.find({author: userId})
-
-        // retrive all child zohe ids (replies) from the clildren field
-        const childZoheIds = userZohe.reduce((acc, userZohe) => {
-            return acc.concat(userZohe.children)
-        }, [])
-
-        const replies = await Zohe.find({
-            _id:{$in: childZoheIds},
-            author: {$ne: userId}
-        }).populate({
-            path:'author',
+    // Find all zohes authored by the user with the given userId
+    const zohes = await User.findOne({ id: userId }).populate({
+      path: "zohes",
+      model: Zohe,
+      populate: [
+        {
+          path: "community",
+          model: Community,
+          select: "name id image _id", // Select the "name" and "_id" fields from the "Community" model
+        },
+        {
+          path: "children",
+          model: Zohe,
+          populate: {
+            path: "author",
             model: User,
-            select: 'name image _id'
-        })
+            select: "name image id", // Select the "name" and "_id" fields from the "User" model
+          },
+        },
+      ],
+    });
+    return zohes;
+  } catch (error) {
+    console.error("Error fetching user zohes:", error);
+    throw error;
+  }
+}
 
-        return replies
-    } catch (error:any) {
-        throw new Error(`Failed to fetch activity: ${error.message}`)
+// Almost similar to Thead (search + pagination) and Community (search + pagination)
+export async function fetchUsers({
+  userId,
+  searchString = "",
+  pageNumber = 1,
+  pageSize = 20,
+  sortBy = "desc",
+}: {
+  userId: string;
+  searchString?: string;
+  pageNumber?: number;
+  pageSize?: number;
+  sortBy?: SortOrder;
+}) {
+  try {
+    connectToDB();
+
+    // Calculate the number of users to skip based on the page number and page size.
+    const skipAmount = (pageNumber - 1) * pageSize;
+
+    // Create a case-insensitive regular expression for the provided search string.
+    const regex = new RegExp(searchString, "i");
+
+    // Create an initial query object to filter users.
+    const query: FilterQuery<typeof User> = {
+      id: { $ne: userId }, // Exclude the current user from the results.
+    };
+
+    // If the search string is not empty, add the $or operator to match either username or name fields.
+    if (searchString.trim() !== "") {
+      query.$or = [
+        { username: { $regex: regex } },
+        { name: { $regex: regex } },
+      ];
     }
+
+    // Define the sort options for the fetched users based on createdAt field and provided sort order.
+    const sortOptions = { createdAt: sortBy };
+
+    const usersQuery = User.find(query)
+      .sort(sortOptions)
+      .skip(skipAmount)
+      .limit(pageSize);
+
+    // Count the total number of users that match the search criteria (without pagination).
+    const totalUsersCount = await User.countDocuments(query);
+
+    const users = await usersQuery.exec();
+
+    // Check if there are more users beyond the current page.
+    const isNext = totalUsersCount > skipAmount + users.length;
+
+    return { users, isNext };
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    throw error;
+  }
+}
+
+export async function getActivity(userId: string) {
+  try {
+    connectToDB();
+
+    // Find all zohes created by the user
+    const userZohes = await Zohe.find({ author: userId });
+
+    // Collect all the child zohe ids (replies) from the 'children' field of each user zohe
+    const childZoheIds = userZohes.reduce((acc, userZohe) => {
+      return acc.concat(userZohe.children);
+    }, []);
+
+    // Find and return the child zohes (replies) excluding the ones created by the same user
+    const replies = await Zohe.find({
+      _id: { $in: childZoheIds },
+      author: { $ne: userId }, // Exclude zohes authored by the same user
+    }).populate({
+      path: "author",
+      model: User,
+      select: "name image _id",
+    });
+
+    return replies;
+  } catch (error) {
+    console.error("Error fetching replies: ", error);
+    throw error;
+  }
 }
